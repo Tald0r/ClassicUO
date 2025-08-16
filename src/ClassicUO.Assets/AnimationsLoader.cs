@@ -27,6 +27,8 @@ namespace ClassicUO.Assets
 
         private readonly UOFileMul[] _files = new UOFileMul[10];
         private readonly UOFileUop[] _filesUop = new UOFileUop[10];
+        
+        private AnimationLoaderUniversal _overlay175;
 
         private readonly Dictionary<ushort, Dictionary<ushort, EquipConvData>> _equipConv = new Dictionary<ushort, Dictionary<ushort, EquipConvData>>();
         private readonly Dictionary<int, MobTypeInfo> _mobTypes = new Dictionary<int, MobTypeInfo>();
@@ -209,6 +211,19 @@ namespace ClassicUO.Assets
             ProcessEquipConvDef();
             ProcessBodyDef();
             ProcessCorpseDef();
+
+            // --- Universal 175-slot overlay init ---
+            try
+            {
+                _overlay175 = new AnimationLoaderUniversal(FileManager);
+                if (_overlay175.Load())
+                    Log.Info("Universal overlay loaded: anim_custom.mul/idx");
+            }
+            catch (Exception ex)
+            {
+                Log.Warn($"Overlay load failed: {ex.Message}");
+            }
+            // ----------------------------------------
         }
 
         public bool ReplaceBody(ref ushort body, ref ushort hue)
@@ -1397,6 +1412,48 @@ namespace ClassicUO.Assets
                 ReadSpriteData(ref reader, palette, ref frames[i], false);
             }
 
+            return frames;
+        }
+        
+        public ReadOnlySpan<FrameInfo> TryReadOverlay175Frames(int body, int action, int dir)
+        {
+            if (_overlay175 == null || !_overlay175.IsLoaded)
+                return ReadOnlySpan<FrameInfo>.Empty;
+
+            int mdir = AnimationLoaderUniversal.MirrorDir(dir);
+            if (!_overlay175.Exists(body, action, mdir))
+                return ReadOnlySpan<FrameInfo>.Empty;
+
+            return _overlay175.GetFrames(body, action, mdir, ReadMulByIndex);
+        }
+        
+        private ReadOnlySpan<FrameInfo> ReadMulByIndex(UOFileMul mul, UOFileIndex idx)
+        {
+            if (idx.Offset == 0xFFFF_FFFF || idx.Length <= 0) return ReadOnlySpan<FrameInfo>.Empty;
+            if (idx.Offset + (uint)idx.Length > mul.Length) return ReadOnlySpan<FrameInfo>.Empty;
+
+            mul.Seek(idx.Offset, SeekOrigin.Begin);
+            var buf = new byte[idx.Length];
+            mul.Read(buf);
+
+            var reader = new StackDataReader(buf);
+            var palette = MemoryMarshal.Cast<byte, ushort>(reader.Buffer.Slice(reader.Position, 512));
+            reader.Skip(512);
+
+            long dataStart = reader.Position;
+            uint frameCount = reader.ReadUInt32LE();
+            var frameOffset = new ReadOnlySpan<uint>((uint*)reader.PositionAddress, (int)frameCount);
+
+            if (_frames == null || frameCount > _frames.Length)
+                _frames = new FrameInfo[frameCount];
+
+            var frames = _frames.AsSpan(0, (int)frameCount);
+            for (int i = 0; i < frameCount; i++)
+            {
+                reader.Seek(dataStart + frameOffset[i]);
+                frames[i].Num = i;
+                ReadSpriteData(ref reader, palette, ref frames[i], false);
+            }
             return frames;
         }
 
