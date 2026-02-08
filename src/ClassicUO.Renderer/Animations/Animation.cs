@@ -312,33 +312,52 @@ namespace ClassicUO.Renderer.Animations
                 //(animDir.Address == 0 && animDir.Size == 0)
                 )
                 {
-                    var uopGroupObj = (AnimationGroupUop)groupObj;
-                    var ff = new AnimationsLoader.AnimationDirection()
+                    // --- overlay first (override UOP as well) ---
+                    var overlayFrames = _animationLoader.TryReadOverlay175Frames(id, action, dir);
+                    if (!overlayFrames.IsEmpty)
                     {
-                        Position = uopGroupObj.Offset,
-                        Size = uopGroupObj.CompressedLength,
-                        UncompressedSize = uopGroupObj.DecompressedLength,
-                        CompressionType = uopGroupObj.CompressionType
-                    };
+                        frames = overlayFrames.ToArray();
+                    }
+                    else
+                    {
+                        var uopGroupObj = (AnimationGroupUop)groupObj;
 
-                    frames = _animationLoader.ReadUOPAnimationFrames(
-                        id,
-                        action,
-                        dir,
-                        index.Type,
-                        index.FileIndex,
-                        ff
-                    );
+                        var ff = new AnimationsLoader.AnimationDirection()
+                        {
+                            Position = uopGroupObj.Offset,
+                            Size = uopGroupObj.CompressedLength,
+                            UncompressedSize = uopGroupObj.DecompressedLength,
+                            CompressionType = uopGroupObj.CompressionType
+                        };
+
+                        frames = _animationLoader.ReadUOPAnimationFrames(
+                            id,
+                            action,
+                            dir,
+                            index.Type,
+                            index.FileIndex,
+                            ff
+                        );
+                    }
                 }
                 else
                 {
-                    var ff = new AnimationsLoader.AnimationDirection()
+                    // --- overlay first ---
+                    var overlayFrames = _animationLoader.TryReadOverlay175Frames(id, action, dir);
+                    if (!overlayFrames.IsEmpty)
                     {
-                        Position = groupObj.Direction[dir].Address,
-                        Size = groupObj.Direction[dir].Size,
-                    };
-
-                    frames = _animationLoader.ReadMULAnimationFrames(index.FileIndex, ff);
+                        frames = overlayFrames.ToArray();
+                    }
+                    else
+                    {
+                        var ff = new AnimationsLoader.AnimationDirection()
+                        {
+                            Position = groupObj.Direction[dir].Address,
+                            Size = groupObj.Direction[dir].Size,
+                        };
+                        
+                        frames = _animationLoader.ReadMULAnimationFrames(index.FileIndex, ff);
+                    }
                 }
 
                 if (frames.IsEmpty)
